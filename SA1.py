@@ -3,8 +3,6 @@ import matplotlib.pyplot as plt
 from scipy.integrate import quad
 from mpl_toolkits.mplot3d import Axes3D
 
-
-# Função para calcular a probabilidade de cobertura
 def integrand(x, alpha):
     return 1 / (1 + x ** (alpha / 2))
 
@@ -15,7 +13,6 @@ def probability_of_coverage(alpha, T):
     return rho
 
 
-# Função para calcular a taxa ergódica média de dados
 def integral(t, alpha, p_active):
     integrand = lambda x: 1 / (1 + x ** (alpha / 2))
     lower_limit = (np.exp(t) - 1) ** (-2 / alpha)
@@ -28,15 +25,12 @@ def tau(lambd, alpha, p_active):
     tau, _ = quad(integral_func, 0, np.inf)
     return tau
 
-
-# Valores de density_u e density_b
 density_u = np.sort(np.unique(np.random.uniform(0.0025, 0.0125, 10))).tolist()
 density_b = np.sort(np.unique(np.random.uniform(0.01, 0.05, 10))).tolist()
 
-# Valores de alpha
 alphas = [3, 4, 5]
 
-# Plot 3D para cada alpha
+
 fig = plt.figure(figsize=(18, 6))
 
 for idx, alpha in enumerate(alphas):
@@ -61,8 +55,6 @@ plt.tight_layout()
 plt.show()
 
 
-
-# Definindo os parâmetros
 density_u = 0.03
 density_b = 0.01
 alphas = [3, 4, 5]  # Lista de expoentes de perda de caminho
@@ -72,7 +64,7 @@ for i, alpha in enumerate(alphas):
     PC = []
     for T in T_values:
 
-        #Probabilidade de cobertura
+
         def integrand(x):
             return 1/(1 + x**(alpha/2))
         result, error = quad(integrand, T**(-2/alpha), np.inf)
@@ -93,13 +85,11 @@ plt.show()
 
 
 
-# Definindo os parâmetros
 density_u_values = np.sort(np.unique(np.random.uniform(0.0025, 0.0125, 10)))
 density_b_values = np.sort(np.unique(np.random.uniform(0.01, 0.05, 10)))
 alphas = [3, 4, 5]  # Lista de expoentes de perda de caminho
 
 
-# Função para calcular a probabilidade de cobertura
 def calculate_pc(density_u, density_b, alpha, T):
     def integrand(x):
         return 1 / (1 + x ** (alpha / 2))
@@ -113,9 +103,8 @@ def calculate_pc(density_u, density_b, alpha, T):
     return pc
 
 
-# Gerando gráficos 3D
 fig = plt.figure(figsize=(18, 6))
-T = 1  # Valor fixo de T para a visualização
+T = 1
 
 for i, alpha in enumerate(alphas):
     ax = fig.add_subplot(1, 3, i + 1, projection='3d')

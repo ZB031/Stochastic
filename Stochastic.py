@@ -1,19 +1,14 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy.spatial import Voronoi, voronoi_plot_2d
 from shapely.geometry import Polygon, LineString, Point, mapping, shape
 import random
-from scipy.integrate import quad
-import warnings
-from functools import partial
-import math
-from rtree import index
-import pyproj
-import pandas as pd
-import geopandas as gpd
-import folium
+from scipy.spatial import Voronoi, voronoi_plot_2d
+from scipy.integrate import quad, dblquad
 from scipy.special import hyp2f1
-from scipy.integrate import dblquad
+import warnings
+import pandas as pd
+import folium
+
 
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 warnings.simplefilter(action='ignore', category=FutureWarning)
@@ -26,32 +21,32 @@ expoente de perda de caminho: 4
 
 np.random.seed(4)
 
-# Definindo os parâmetros da região retangular
+# Region
 x_min, x_max = 0, 100
 y_min, y_max = 0, 100
 region_area = (x_max - x_min) * (y_max - y_min)
 
-# Definindo a densidade de pontos (pontos por unidade de área)
+# BS density
 density_b = 0.01
 expected_num_points = int(region_area * density_b)
 
-# Gerando os pontos de acordo com o processo de Poisson homogêneo
+# Generating Point from a PPP
 num_points = np.random.poisson(expected_num_points)
 points = np.random.uniform(low=(x_min, y_min), high=(x_max, y_max), size=(num_points, 2))
 
-# Plotando os usuários de dados, com a mesma seed, de forma que regiões mais densas de bs tenham mais usuários
+# Plot users
 density_u = 0.03
 expected_num_pointss = int(region_area * density_u)
 num_pointss = np.random.poisson(expected_num_pointss)
 pointss = np.random.uniform(low=(x_min, y_min), high=(x_max, y_max), size=(num_pointss, 2))
 
-# Criando as células de Voronoi
+# Creating Voronoi Cells
 vor = Voronoi(points)
 voronoi_plot_2d(vor)
 
 for i in range(len(pointss)):
     xs, ys = pointss[i]
-    plt.plot(xs, ys, marker='o', markersize=5, label='Usuários', color='black')
+    plt.plot(xs, ys, marker='o', markersize=5, label='Users', color='black')
 
 for region_index in vor.regions:
     if region_index and -1 not in region_index:
@@ -59,25 +54,22 @@ for region_index in vor.regions:
         line_vert = LineString(region_vertices)
         centroid = line_vert.centroid
         x, y = centroid.xy
-        plt.plot(*line_vert.xy, marker='o', markersize=5, label='Pontos', color='blue')
-        plt.plot(x, y, marker='o', markersize=5, label='Centróide', color='red')
+        plt.plot(*line_vert.xy, marker='o', markersize=5, label='Points', color='blue')
+        plt.plot(x, y, marker='o', markersize=5, label='Centroid', color='red')
 
-
-# Definindo os limites do gráfico
 plt.xlim(x_min, x_max)
 plt.ylim(y_min, y_max)
-
 plt.xlabel('X')
 plt.ylabel('Y')
 plt.title('Voronoi Cells Diagram With Homogeneous PPP')
 
-# Selecionando um usuário aleatório:
+# Selecting random user
 i = random.randint(1, num_pointss)
 user = pointss[i]
 plt.plot(user[0], user[1], marker='^', label = 'Selected MU', markersize=7, color='green')
 
 
-# Parâmetros:
+# Parameters and Minimum Distance
 alpha = 4
 
 R = []
@@ -85,8 +77,8 @@ for j in range(len(points)):
     bs = points[j]
     dist = np.linalg.norm(np.sqrt((user[0] - bs[0])**2 + (user[1] - bs[1])**2))
     R.append(dist.round(2))
-r = min(R)#distância de um usuário até a estação base mais próxima
-R.remove(r)#distância das estações interferentes até o usuário considerado
+r = min(R)
+R.remove(r)
 
 server_bs = []
 for j in range(len(points)):
@@ -95,40 +87,37 @@ for j in range(len(points)):
         server_bs.append(bs)
         plt.plot(bs[0], bs[1], marker='^', color='blue')
 
-T = 1
-lambd = density_b
-sigma = 0
 
-# Liga bs e user:
+# Links bs and user:
 line = LineString([user, server_bs[0]])
 xl, yl = line.xy
 plt.plot(xl, yl, color = 'yellow')
 plt.show()
 
-#Probabilidade de cobertura
-def integrand(x):
-    return 1/(1 + x**(alpha/2))
-result, error = quad(integrand, T**(-2/alpha), np.inf)
+# Coverage Probability:
+alpha = 4
+T_values = np.sort(np.unique(np.random.uniform(0, 20, 100))).tolist()
+PC = []
+for T in T_values:
+    def integrand(x):
+        return 1/(1 + x**(alpha/2))
+    result, error = quad(integrand, T**(-2/alpha), np.inf)
 
-p_active = 1 - (1 + (density_u)/(density_b*3.5))**(-3.5)
+    p_active = 1 - (1 + (density_u)/(density_b*3.5))**(-3.5)
+    rho = T**(2/alpha)*result
+    pc = (density_b)/(density_u)*p_active/(1 + p_active*rho)
+    PC.append(pc)
+plt.plot(T_values, PC, marker='o', color='red', markersize=3, label=f'alpha = {alpha}')
+print(PC, len(PC))
+plt.xlabel('SINR')
+plt.ylabel('Probability of Coverage')
+plt.title('Probability of Coverage x SINR')
+plt.grid(True)
+plt.legend()
+plt.show()
 
-rho = T**(2/alpha)*result
-pc = (density_b)/(density_u)*p_active/(1 + p_active*rho)
-
-#Taxa de dados
-def integral(t, alpha):
-    integrand = lambda x: 1 / (1 + x**(alpha/2))
-    lower_limit = (np.exp(t) - 1)**(-2/alpha)
-    inner_result, _ = quad(integrand, lower_limit, np.inf)
-    return 1 / (1 + p_active*(np.exp(t) - 1)**(2/alpha) * inner_result)
-
-def tau(lambd, alpha):
-    integral_func = lambda t: integral(t, alpha)
-    tau, _ = quad(integral_func, 0, np.inf)
-    return tau
-
-#Resultados:
-
+'''
+Saturated Network:
 PC = []
 T = np.sort(np.unique(np.random.uniform(0, 20, 100))).tolist()
 for t in T:
@@ -142,17 +131,29 @@ plt.ylabel('Probability of Coverage')
 plt.title('Probability of Coverage x SINR')
 plt.grid(True)
 plt.show()
+'''
+
+#Taxa de dados
+def integral(t, alpha):
+    integrand = lambda x: 1 / (1 + x**(alpha/2))
+    lower_limit = (np.exp(t) - 1)**(-2/alpha)
+    inner_result, _ = quad(integrand, lower_limit, np.inf)
+    return 1 / (1 + p_active*(np.exp(t) - 1)**(2/alpha) * inner_result)
+
+def tau(lambd, alpha):
+    integral_func = lambda t: integral(t, alpha)
+    tau, _ = quad(integral_func, 0, np.inf)
+    return tau
 
 print('='*100)
 
-print(f'A taxa ergódica média de dados (SE) é de aproximadamente {round(tau(lambd, alpha)/np.log(2), 2)} bps/Hz')
+print(f'A taxa ergódica média de dados (SE) é de aproximadamente {round(tau(density_b, alpha)/np.log(2), 2)} bps/Hz')
 
 print('='*100)
 
 
-'''Análise Mais Detalhada: Começaremos com as informações relativas às células, fornecidas pela ANATEL.'''
+'''Loading data base'''
 
-# Estudando Florianópolis
 df = pd.read_csv('florianopolis_rbs.csv', encoding='latin1', low_memory=False)
 pd.set_option('display.max_rows', None)
 pd.set_option('display.max_columns', None)
@@ -165,7 +166,6 @@ df = df.loc[:, colunas]
 print('Área de Florianópolis: 675.409 Km^2')
 area = 675.409
 
-#Mostrando as células de transmissão no mapa:
 '''
 df_coordinates = df.loc[:, ['Latitude', 'Longitude']]
 df_coordinates = df_coordinates.drop_duplicates()
@@ -181,7 +181,7 @@ for idx, row in df_coordinates.iterrows():
 map.show_in_browser()'''
 
 
-'''Agora vou pegar dados de uma única operadora, a saber TIM.'''
+'''Selecting data from a single operator'''
 
 timdf = df.loc[df['NomeEntidade'] == 'TIM S A']
 
@@ -222,31 +222,26 @@ for idx, row in df_coordinates.iterrows():
 
 timmap.show_in_browser()'''
 
-#Caso considerado: sem viés (o usuário será associado à estação base com sinal mais forte e mais próxima)
-# e sem ruído térmico.
+# Users density
+lambda_u = 100000/area
 
-lambda_u = 100000/area#Densidade de usuários, dado de teste
-
-# Definindo os parâmetros da região retangular
+# Region
 x_min, x_max = 0, 16
 y_min, y_max = 0, 42
-region_area = (x_max - x_min) * (y_max - y_min)#Aproximei a area de Florianópolis por 16*42 Km^2
+region_area = (x_max - x_min) * (y_max - y_min)#Approx the area by 16*42 Km^2
 
 
-# Número esperado de pontos por célula
 expected_num_cell_points = [int(region_area * density) for density in densidades_cells]
 print("Número esperado de células por tipo de célula (considerando a área aproximada):", expected_num_cell_points)
 num_points_per_cell = [np.random.poisson(lam) for lam in expected_num_cell_points]
 print("Número de células por tipo de célula calculado pelo processo de Poisson:", num_points_per_cell)
 
-# Plotando os pontos para cada célula
 points = [np.random.uniform(low=(x_min, y_min), high=(x_max, y_max), size=(n_points, 2))
           for n_points in num_points_per_cell]
 
-# Cores para cada célula
 colors = ['b', 'green', 'red', 'orange', 'yellow', 'purple', 'pink', 'gray']
 
-# Criando um diagrama de Voronoi para as células
+# Creating the Voronoi Diagram
 all_points = np.vstack(points)
 all_colors = np.concatenate([[colors[i]] * len(points[i]) for i in range(len(points))])
 vor = Voronoi(all_points)
@@ -261,7 +256,7 @@ plt.legend()
 plt.gca().set_aspect('equal', adjustable='box')
 plt.title('Voronoi Diagram, Classification of the Layer Based on Color.')
 
-#Plotando usuários
+# Plot Users
 expected_num_pointss = int(region_area * lambda_u)
 num_pointss = np.random.poisson(expected_num_pointss)
 pointss = np.random.uniform(low=(x_min, y_min), high=(x_max, y_max), size=(num_pointss, 2))
@@ -270,7 +265,7 @@ pointss = np.random.uniform(low=(x_min, y_min), high=(x_max, y_max), size=(num_p
     plt.plot(xs, ys, marker='o', markersize=5, color='black')'''
 
 
-# Selecionando um usuário aleatório:
+# Random User
 i = random.randint(0, num_pointss-1)
 user = pointss[i]
 plt.plot(user[0], user[1], marker='o', label = 'Selected MU', markersize=10, color='white')
@@ -284,9 +279,9 @@ for i in range(len(points)):
         bs = points[i][j]
         dist = np.linalg.norm(np.sqrt((user[0] - bs[0])**2 + (user[1] - bs[1])**2))
         R.append(dist.round(2))
-    r = min(R)#distância de um usuário até a estação base mais próxima
+    r = min(R)
     distancia_atendimento.append(r)
-    R.remove(r)#distância das estações interferentes até o usuário considerado
+    R.remove(r)
     distancia_interferente.append(R)
 
     server_bs = []
@@ -324,10 +319,10 @@ for k in range(len(potencia)):
     N.append(n)
 
 for k in range(len(A)):
-    print('A probabilidade de um usuário aleatório estar associado com o nível {} é: {}%'.format(k+1, A[k]*100))
-    print('O número médio de usuários associados a uma BS na camada {}, em um dado instante, é: {}'.format(k+1, N[k]))
+    print('The probability of a random user being associated with level {} is: {}%'.format(k+1, A[k]*100))
+    print('The average number of users associated with a BS in layer {} at any given time is: {}'.format(k+1, N[k]))
 
-# Probabilidade de cobertura: Seja T o SINR
+# Probability of coverage
 T_values = np.sort(np.unique(np.random.uniform(0, 20, 100))).tolist()
 
 def Z(T, alpha_j):
@@ -378,7 +373,7 @@ plt.tight_layout()
 plt.show()
 
 
-# Calculando a eficiência espectral:
+# SE:
 def Z_t(t, alpha_j):
     a = 1
     b = 1 - (2 / alpha_j)
@@ -421,9 +416,9 @@ for k in range(len(densidades_cells)):
     tau += 2 * np.pi * lambda_k * integral_result
 
 print('='*100)
-print('Eficiência espectral média da rede, em bps/Hz, para o caso com diferentes expoentes de perda de caminho:', round(tau/np.log(2), 2))
+print('Average network spectral efficiency, in bps/Hz, for the case with different path loss exponents:', round(tau/np.log(2), 2))
 
-#Caso com todos os expoentes de perda de caminho iguais:
+# Equal path loss:
 
 def integranda(t, alpha):
     Z_value = Z_t(t, alpha)
@@ -438,5 +433,5 @@ for it in intervals_t:
     result += partial_result
 
 
-print('Eficiência espectral média da rede, em bps/Hz, para o caso com todos os expoentes de perda de caminho iguais a 4:', round(result/np.log(2), 2))
+print('Average network spectral efficiency, in bps/Hz, for the case with all path loss exponents equal to 4:', round(result/np.log(2), 2))
 print('='*100)
